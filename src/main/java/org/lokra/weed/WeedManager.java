@@ -1,6 +1,7 @@
 package org.lokra.weed;
 
 import feign.Feign;
+import feign.form.FormEncoder;
 import feign.jackson.JacksonDecoder;
 import feign.okhttp.OkHttpClient;
 import org.lokra.weed.content.Cluster;
@@ -34,7 +35,8 @@ public class WeedManager {
   private WeedMasterClient leaderMaster;
   private String host;
   private int port;
-  private ConcurrentSkipListSet<WeedVolumeClient> unavailableClients = new ConcurrentSkipListSet<>();
+  private ConcurrentSkipListSet<WeedVolumeClient> unavailableClients =
+      new ConcurrentSkipListSet<>();
 
   public WeedManager() {}
 
@@ -153,6 +155,7 @@ public class WeedManager {
                     id,
                     Feign.builder()
                         .client(new OkHttpClient())
+                        .encoder(new FormEncoder())
                         .decoder(new JacksonDecoder())
                         .target(
                             WeedVolumeClient.class,
@@ -217,20 +220,21 @@ public class WeedManager {
 
     peerMasters.remove(leaderMasterUrl);
     removeSet.forEach(key -> peerMasters.remove(key));
-
-    cluster
-        .getPeers()
-        .forEach(
-            url -> {
-              if (!peerMasters.containsKey(url)) {
-                peerMasters.put(
-                    url,
-                    Feign.builder()
-                        .client(new OkHttpClient())
-                        .decoder(new JacksonDecoder())
-                        .target(WeedMasterClient.class, String.format("http://%s", url)));
-              }
-            });
+    if (null != cluster.getPeers()) {
+      cluster
+          .getPeers()
+          .forEach(
+              url -> {
+                if (!peerMasters.containsKey(url)) {
+                  peerMasters.put(
+                      url,
+                      Feign.builder()
+                          .client(new OkHttpClient())
+                          .decoder(new JacksonDecoder())
+                          .target(WeedMasterClient.class, String.format("http://%s", url)));
+                }
+              });
+    }
   }
 
   /** Master server health check thread */
@@ -266,10 +270,7 @@ public class WeedManager {
     }
   }
 
-  /**
-   * Volume server health check thread
-   *
-   */
+  /** Volume server health check thread */
   class VolumeHealthCheckThread extends Thread {
     @Override
     public void run() {
